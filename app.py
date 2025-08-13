@@ -1,204 +1,315 @@
-import re
 import streamlit as st
-from langchain_ollama import OllamaLLM
+from langchain_community.graphs import OntotextGraphDBGraph
+from langchain.chains import OntotextGraphDBQAChain
+from langchain_ollama.llms import OllamaLLM
 from langchain.prompts import PromptTemplate
-from rdflib import Graph, URIRef, Literal, RDFS, Namespace
 from SPARQLWrapper import SPARQLWrapper, JSON
+from annotated_text import annotated_text
 
-# Load RDF graph
-g = Graph()
-g.parse("data/graph.ttl", format="turtle")
+# Set up the GraphDB connection and load ontology
+@st.cache_resource
+def load_graph():
+    return OntotextGraphDBGraph(
+        query_endpoint="http://localhost:7200/repositories/coptic-metadata-viewer",
+        local_file="data/coptic-metadata-viewer.ttl",  # Adjust path as needed
+    )
 
-# Load the LLM
-llm = OllamaLLM(model="mistral-small3.2")
+graph = load_graph()
 
-def get_label(graph, node, show_uri=False):
-    if isinstance(node, Literal):
-        return str(node)
-    elif isinstance(node, URIRef):
-        # Try rdfs:label, foaf:name, schema:title, dcterms:title, etc.
-        for label_pred in [
-            RDFS.label,
-            Namespace("http://xmlns.com/foaf/0.1/").name,
-            Namespace("http://schema.org/").title,
-            Namespace("http://purl.org/dc/terms/").title,
-        ]:
-            label = graph.value(node, label_pred)
-            if label:
-                return str(label)
-        return str(node)  # Fallback: show the URI
-    else:
-        return str(node)
+# =======================================
+# TEMPLATES
+# =======================================
 
-def format_query_results(graph, results, show_uri=False):
-    formatted = []
-    for row in results:
-        row_values = []
-        for val in row:
-            row_values.append(get_label(graph, val, show_uri))
-        formatted.append(" | ".join(row_values))
-    return formatted
+# SPARQLGeneration Template
+GRAPHDB_SPARQL_GENERATION_TEMPLATE = """
+  You are an expert in SPARQL queries and RDF graph structures. Your task is to generate a SPARQL query based on the provided schema and the user's question.
+  Use only the node types and properties provided in the schema.
+  Do not use any node types or properties not explicitly listed.
+  Include all necessary PREFIX declarations.
+  Return only the SPARQL query.
+  Use a (shorthand for rdf:type) to declare the class of a subject.
+  Do not wrap the query in backticks.
+  Do not use triple backticks or any markdown formatting.
+  Do not include any text except the SPARQL query generated.
+  Always return a human-readable label instead of a URI when possible.
+  Do not use multiple WHERE clauses.
+  
+  Your RDF graph has these prefixes, classes, and properties:
 
-def extract_sparql_query(text):
-    # Strip out code block markers and any explanations
-    # Look for query starting with SELECT, ASK, etc.
-    match = re.search(r"(SELECT|CONSTRUCT|ASK|DESCRIBE).*", text, re.DOTALL | re.IGNORECASE)
-    if match:
-        return match.group(0).strip()
-    return None
+    @prefix coptic: <http://www.semanticweb.org/sjhuskey/ontologies/2025/7/coptic-metadata-viewer/> .
+    @prefix dcmitype: <http://purl.org/dc/dcmitype/> .
+    @prefix dcterms: <http://purl.org/dc/terms/> .
+    @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+    @prefix frbr: <http://purl.org/vocab/frbr/core#> .
+    @prefix lawd: <http://lawd.info/ontology/> .
+    @prefix ns1: <http://lexinfo.net/ontology/2.0/lexinfo#> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix schema1: <http://schema.org/> .
+    @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+    @prefix time: <http://www.w3.org/2006/time#> .
+    
+    - coptic:Colophon:
+      - dcterms:description
+      - dcterms:identifier
+      - dcterms:isPartOf
+      - dcterms:references
+      - dcterms:type
+      - ns1:translation
+      - rdf:type
+      - time:hasBeginning
+      - time:hasEnd
 
-# Prompt template
-template = ("""
-    You are a SPARQL expert working with a Coptic literary metadata graph.
-    Use only these prefixes:
-        PREFIX cidoc: <http://www.cidoc-crm.org/cidoc-crm/>
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-        PREFIX schema1: <http://schema.org/>
-        PREFIX frbr: <http://purl.org/vocab/frbr/core#>
-        PREFIX lawd: <http://lawd.info/ontology/>
-        PREFIX ns1: <http://lexinfo.net/ontology/2.0/lexinfo#>
-        PREFIX time: <http://www.w3.org/2006/time#>
-        PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#> 
-    These are the only classes and properties you can use:
-        - cidoc:E34_Inscription
-            - cidoc:P4_has_time_span
-            - dcterms:description
-            - dcterms:references
-            - ns1:translation
-            - rdf:type
-            - rdf:value
+    - coptic:Title:
+      - dcterms:description
+      - dcterms:identifier
+      - dcterms:isPartOf
+      - dcterms:references
+      - dcterms:type
+      - rdf:type
 
-        - cidoc:E35_Title
-            - cidoc:P1_is_identified_by
-            - dcterms:description
-            - dcterms:references
-            - rdf:type
-            - rdf:value
+    - dcmitype:Collection:
+      - dcterms:hasPart
+      - dcterms:identifier
+      - dcterms:spatial
+      - rdf:type
 
-        - cidoc:E84_Information_Carrier
-            - cidoc:P128_carries
-            - cidoc:P1_is_identified_by
-            - cidoc:P2_has_type
-            - dcterms:bibliographicCitation
-            - dcterms:description
-            - dcterms:hasPart
-            - dcterms:identifier
-            - rdf:type
-            - time:hasBeginning
-            - time:hasEnd
+    - dcterms:Agent:
+      - dcterms:creator
+      - dcterms:description
+      - dcterms:identifier
+      - foaf:name
+      - owl:sameAs
+      - rdf:type
+      - schema1:title
 
-        - cidoc:Identifier
-            - cidoc:P1_identifies
-            - cidoc:P1_is_identified_by
-            - cidoc:P48_has_preferred_identifier
-            - dcterms:isPartOf
-            - rdf:type
+    - dcterms:PhysicalResource:
+      - dcterms:bibliographicCitation
+      - dcterms:description
+      - dcterms:hasPart
+      - dcterms:identifier
+      - dcterms:isPartOf
+      - dcterms:medium
+      - rdf:type
+      - time:hasBeginning
+      - time:hasEnd
 
-        - creator
-            - cidoc:P94_has_created
-            - dcterms:description
-            - foaf:name
-            - owl:sameAs
-            - rdf:type
-            - schema1:title
+    - foaf:Person:
+      - dcterms:identifier
+      - dcterms:isReferencedBy
+      - foaf:name
+      - ns1:transliteration
+      - rdf:type
+      - rdfs:label
+      - schema1:birthPlace
+      - schema1:gender
+      - schema1:roleName
+      - time:hasBeginning
+      - time:hasEnd
 
-        - dcmitype:Collection
-            - cidoc:P48_has_preferred_identifier
-            - cidoc:P55_has_current_location
-            - dcterms:hasPart
-            - dcterms:spatial
-            - rdf:type
+    - frbr:Work:
+      - dcterms:creator
+      - dcterms:description
+      - dcterms:identifier
+      - dcterms:isPartOf
+      - dcterms:isReferencedBy
+      - dcterms:temporal
+      - dcterms:title
+      - rdf:type
+      - rdfs:label
 
-        - dcterms:Agent
-            - cidoc:P94_has_created
-            - dcterms:description
-            - foaf:name
-            - owl:sameAs
-            - rdf:type
-            - schema1:title
+    - lawd:Place:
+      - lawd:primaryForm
+      - rdf:type
+      - rdfs:label
+      - skos:exactMatch
+    
+    Schema: {schema}
+  
+    The question delimited by triple backticks is:
+  ```
+  {prompt}
+  ```
+  """
+GRAPHDB_SPARQL_GENERATION_PROMPT = PromptTemplate(
+      input_variables=["schema", "prompt"],
+      template=GRAPHDB_SPARQL_GENERATION_TEMPLATE,
+  )
 
-        - foaf:Person
-            - cidoc:P2_has_type
-            - cidoc:P98_brought_into_life
-            - dcterms:isReferencedBy
-            - dcterms:temporal
-            - foaf:name
-            - ns1:transliteration
-            - rdf:type
-            - rdfs:label
-            - schema1:gender
-            - schema1:roleName
+# SPARQL Fix Template
+GRAPHDB_SPARQL_FIX_TEMPLATE = """
+  This following SPARQL query delimited by triple backticks
+  ```
+  {generated_sparql}
+  ```
+  is not valid.
+  The error delimited by triple backticks is
+  ```
+  {error_message}
+  ```
+  - Do NOT include any Markdown formatting (e.g. no ```sparql or backticks).
+  - Do NOT output explanations, only the corrected query.
+  - Always start with any necessary PREFIX declarations.
+  - Use `a` instead of `rdf:type` to state class membership.
+  - Ensure that classes like `frbr:Work` are used as objects, not predicates.
+  - Fix common mistakes like using classes as predicates, missing semicolons, or malformed FILTER clauses.
 
-        - frbr:Work
-            - cidoc:P128_is_carried_by
-            - cidoc:P1_is_identified_by
-            - cidoc:P94_was_created_by
-            - dcterms:description
-            - dcterms:isReferencedBy
-            - dcterms:temporal
-            - dcterms:title
-            - rdf:type
+  Only output a valid, working SPARQL query.
+  ```
+  {schema}
+  ```
+  """
+GRAPHDB_SPARQL_FIX_PROMPT = PromptTemplate(
+      input_variables=["error_message", "generated_sparql", "schema"],
+      template=GRAPHDB_SPARQL_FIX_TEMPLATE,
+  )
 
-        - master
-            - cidoc:P94_has_created
-            - dcterms:description
-            - foaf:name
-            - owl:sameAs
-            - rdf:type
-            - schema1:title
+# QA Template
+GRAPHDB_QA_TEMPLATE = """Task: Generate a natural language response from the results of a SPARQL query.
+  You are an assistant that creates well-written and human understandable answers.
+  The information part contains the information provided, which you can use to construct an answer.
+  The information provided is authoritative, you must never doubt it or try to use your internal knowledge to correct it.
+  Make your response sound like the information is coming from an AI assistant, but don't add any information.
+  Don't use internal knowledge to answer the question.
+  If no information is available, suggest using a universal string search.
+  Information:
+  {context}
+  
+  Question: {prompt}
+  Helpful Answer:"""
+GRAPHDB_QA_PROMPT = PromptTemplate(
+      input_variables=["context", "prompt"], template=GRAPHDB_QA_TEMPLATE
+  )
 
-        - stated
-            - cidoc:P94_has_created
-            - dcterms:description
-            - foaf:name
-            - owl:sameAs
-            - rdf:type
-            - schema1:title
-
-        - lawd:Place
-            - lawd:primaryForm
-            - rdf:type
-            - rdfs:label
-            - skos:exactMatch
-    Only use properties and classes defined in this ontology. Do NOT invent new prefixes or query Wikidata.
-    Always include OPTIONAL {{{{ ?x rdfs:label|foaf:name ?label }}}} when a human-readable label is helpful.
-    Return ONLY the SPARQL query. Do not explain. Do not introduce. No commentary.
-    Question: {question}
-
-    SPARQL:"""
+sparql_generation_prompt = PromptTemplate(
+    input_variables=["schema", "prompt"],
+    template=GRAPHDB_SPARQL_GENERATION_TEMPLATE,
 )
 
+sparql_fix_prompt = PromptTemplate(
+    input_variables=["error_message", "generated_sparql", "schema"],
+    template=GRAPHDB_SPARQL_FIX_TEMPLATE,
+)
 
-prompt = PromptTemplate(input_variables=["question"], template=template)
+qa_prompt = PromptTemplate(
+    input_variables=["context", "prompt"],
+    template=GRAPHDB_QA_TEMPLATE,
+)
 
+# =======================================================
+# Load LLM and QA chain
+# =======================================================
+@st.cache_resource
+def load_chain():
+    return OntotextGraphDBQAChain.from_llm(
+        OllamaLLM(model="mistral-small3.2", temperature=0),
+        graph=graph,
+        sparql_generation_prompt=sparql_generation_prompt,
+        sparql_fix_prompt=sparql_fix_prompt,
+        qa_prompt=qa_prompt,
+        max_fix_retries=3,
+        return_intermediate_steps=True,
+        verbose=True,
+        allow_dangerous_requests=True,
+    )
+
+chain = load_chain()
+
+# =======================================================
 # Streamlit UI
-st.title("Ask Your RDF Graph")
-user_query = st.text_input("Ask a question:")
-show_uri = st.checkbox("Show full URIs")
-if show_uri:
-    st.write("Full URIs will be displayed in the results.")
+# =======================================================
+st.set_page_config(page_title="Coptic Metadata Viewer", page_icon=":book:")
+st.title("Coptic Metadata Viewer")
+st.markdown("Ask questions about manuscripts, authors, works, and more. You can ask a question in natural language or search for specific terms in the metadata.")
 
-if user_query:
-    formatted_prompt = prompt.format(question=user_query)
-    raw_response = llm.invoke(formatted_prompt)
-    sparql_query = extract_sparql_query(raw_response)
-    if sparql_query:
-        st.code(sparql_query, language="sparql")
-        st.text_area("Raw LLM output", raw_response, height=150)
+# Choose mode
+mode = st.radio("Choose your query mode:", ["Natural Language Question", "Universal String Search"])
+
+# Text input
+user_input = st.text_area("🔎 Enter your query:")
+
+if st.button("Submit"):
+    query_text = user_input.strip()
+    if query_text:
+        with st.spinner("Querying the graph..."):
+            try:
+                if mode == "Universal String Search":
+                    search_string = query_text.lower()
+                    universal_query = f"""
+                    SELECT ?subject ?predicate ?object
+                    WHERE {{
+                      ?subject ?predicate ?object .
+                      FILTER (isLiteral(?object) && CONTAINS(LCASE(STR(?object)), "{search_string}"))
+                    }}
+                    """
+
+                    sparql = SPARQLWrapper("http://localhost:7200/repositories/coptic-metadata-viewer")
+                    sparql.setQuery(universal_query)
+                    sparql.setReturnFormat(JSON)
+                    results = sparql.query().convert()
+
+                    st.subheader("🧐 SPARQL Query")
+                    st.code(universal_query, language="sparql")
+
+                    st.subheader("📘 Results")
+                    bindings = results["results"]["bindings"]
+                    if bindings:
+                        for i, row in enumerate(bindings, start=1):
+                            subject = row.get("subject", {}).get("value", "")
+                            predicate = row.get("predicate", {}).get("value", "")
+                            obj = row.get("object", {}).get("value", "")
+
+                            st.markdown(f"#### Result {i}")
+
+                            def highlight_term(text, term):
+                                lower = text.lower()
+                                start = lower.find(term)
+                                if start >= 0:
+                                    term_text = text[start:start+len(term)]
+                                    return [
+                                        text[:start],
+                                        (term_text, term_text, "#ff0"),  # yellow highlight
+                                        text[start+len(term):],
+                                    ]
+                                else:
+                                    return [text]
+
+                            search_term = query_text.lower()
+
+                            st.write("**Found in:**")
+                            annotated_text(*highlight_term(subject, search_term))
+
+                            st.write("**Predicate:**")
+                            annotated_text(*highlight_term(predicate, search_term))
+
+                            st.write("**Object:**")
+                            annotated_text(*highlight_term(obj, search_term))
+                            st.markdown("---")
+                    else:
+                        st.info("No matches found.")
+                else:
+                    result = chain.invoke({"query": query_text})
+                    sparql_query = result.get("intermediate_steps", {}).get("original_sparql") or \
+                                   result.get("intermediate_steps", {}).get("fixed_sparql")
+                    answer = result.get("answer", "[No answer returned. Try a universal string search.]")
+
+                    if sparql_query:
+                        st.subheader("🧐 Generated SPARQL Query")
+                        st.code(sparql_query, language="sparql")
+
+                    st.subheader("📘 Answer")
+                    if isinstance(answer, list):
+                        for i, item in enumerate(answer, start=1):
+                            st.markdown(f"#### Result {i}")
+                            annotated_text(*item)
+                    else:
+                        if answer:
+                            st.markdown(answer)
+                        elif not answer:
+                            st.markdown("No answer returned. Try a universal string search.")
+            except Exception as e:
+                st.error("Error running query:")
+                st.exception(e)
     else:
-        sparql_query = raw_response.strip()
-
-    try:
-        print("Generated SPARQL query:")
-        print(sparql_query)
-        results = g.query(sparql_query)
-        st.success("Results:")
-
-        for line in format_query_results(g, results, show_uri=show_uri):
-            st.write(line)
-    except Exception as e:
-        st.error(f"SPARQL query failed: {e}")
+        st.warning("Please enter a query.")
