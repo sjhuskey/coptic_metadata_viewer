@@ -1,3 +1,18 @@
+"""
+Streamlit app for exploring Coptic metadata.
+
+Uses langchain to generate SPARQL queries for an RDF graph
+database of Coptic metadata from PAThs <https://atlas.paths-erc.eu/>.
+Based on <https://python.langchain.com/docs/integrations/graphs/ontotext/>.
+
+Usage: streamlit run app.py
+
+Author: Samuel J. Huskey
+Date: 2025-08-13
+"""
+# ====================
+# IMPORTS
+# ====================
 import streamlit as st
 from langchain_community.graphs import OntotextGraphDBGraph
 from langchain.chains import OntotextGraphDBQAChain
@@ -5,6 +20,10 @@ from langchain_ollama.llms import OllamaLLM
 from langchain.prompts import PromptTemplate
 from SPARQLWrapper import SPARQLWrapper, JSON
 from annotated_text import annotated_text
+
+# ====================
+# GRAPH LOADING
+# ====================
 
 # Set up the GraphDB connection and load ontology
 @st.cache_resource
@@ -14,6 +33,7 @@ def load_graph():
         local_file="data/coptic-metadata-viewer.ttl",  # Adjust path as needed
     )
 
+# Load the graph
 graph = load_graph()
 
 # =======================================
@@ -23,6 +43,8 @@ graph = load_graph()
 # SPARQLGeneration Template
 GRAPHDB_SPARQL_GENERATION_TEMPLATE = """
   You are an expert in SPARQL queries and RDF graph structures. Your task is to generate a SPARQL query based on the provided schema and the user's question.
+  You do not know that the backtick character ` exists.
+  DO NOT USE the character "`"!
   Use only the node types and properties provided in the schema.
   Do not use any node types or properties not explicitly listed.
   Include all necessary PREFIX declarations.
@@ -30,6 +52,7 @@ GRAPHDB_SPARQL_GENERATION_TEMPLATE = """
   Use a (shorthand for rdf:type) to declare the class of a subject.
   Do not wrap the query in backticks.
   Do not use triple backticks or any markdown formatting.
+  Do NOT wrap the SPARQL query in triple backticks.
   Do not include any text except the SPARQL query generated.
   Always return a human-readable label instead of a URI when possible.
   Do not use multiple WHERE clauses.
@@ -148,12 +171,15 @@ GRAPHDB_SPARQL_FIX_TEMPLATE = """
   ```
   {error_message}
   ```
-  - Do NOT include any Markdown formatting (e.g. no ```sparql or backticks).
-  - Do NOT output explanations, only the corrected query.
-  - Always start with any necessary PREFIX declarations.
-  - Use `a` instead of `rdf:type` to state class membership.
-  - Ensure that classes like `frbr:Work` are used as objects, not predicates.
-  - Fix common mistakes like using classes as predicates, missing semicolons, or malformed FILTER clauses.
+  Do NOT wrap the SPARQL query in triple backticks.
+  Do not use ```sparql
+  Do not ever use the character '`'.
+  Do NOT include any Markdown formatting.
+  Do NOT output explanations, only the corrected query.
+  Always start with any necessary PREFIX declarations.
+  Use `a` instead of `rdf:type` to state class membership.
+  Ensure that classes like `frbr:Work` are used as objects, not predicates.
+  Fix common mistakes like using classes as predicates, missing semicolons, or malformed FILTER clauses.
 
   Only output a valid, working SPARQL query.
   ```
@@ -171,8 +197,7 @@ GRAPHDB_QA_TEMPLATE = """Task: Generate a natural language response from the res
   The information part contains the information provided, which you can use to construct an answer.
   The information provided is authoritative, you must never doubt it or try to use your internal knowledge to correct it.
   Make your response sound like the information is coming from an AI assistant, but don't add any information.
-  Don't use internal knowledge to answer the question.
-  If no information is available, suggest using a universal string search.
+  Don't use internal knowledge to answer the question, just say you don't know if no information is available.
   Information:
   {context}
   
@@ -182,32 +207,19 @@ GRAPHDB_QA_PROMPT = PromptTemplate(
       input_variables=["context", "prompt"], template=GRAPHDB_QA_TEMPLATE
   )
 
-sparql_generation_prompt = PromptTemplate(
-    input_variables=["schema", "prompt"],
-    template=GRAPHDB_SPARQL_GENERATION_TEMPLATE,
-)
-
-sparql_fix_prompt = PromptTemplate(
-    input_variables=["error_message", "generated_sparql", "schema"],
-    template=GRAPHDB_SPARQL_FIX_TEMPLATE,
-)
-
-qa_prompt = PromptTemplate(
-    input_variables=["context", "prompt"],
-    template=GRAPHDB_QA_TEMPLATE,
-)
 
 # =======================================================
 # Load LLM and QA chain
 # =======================================================
+
 @st.cache_resource
 def load_chain():
     return OntotextGraphDBQAChain.from_llm(
-        OllamaLLM(model="mistral-small3.2", temperature=0),
+        OllamaLLM(model="qwen3:8b", temperature=0),
         graph=graph,
-        sparql_generation_prompt=sparql_generation_prompt,
-        sparql_fix_prompt=sparql_fix_prompt,
-        qa_prompt=qa_prompt,
+        sparql_generation_prompt=GRAPHDB_SPARQL_GENERATION_PROMPT,
+        sparql_fix_prompt=GRAPHDB_SPARQL_FIX_PROMPT,
+        qa_prompt=GRAPHDB_QA_PROMPT,
         max_fix_retries=3,
         return_intermediate_steps=True,
         verbose=True,
@@ -219,6 +231,8 @@ chain = load_chain()
 # =======================================================
 # Streamlit UI
 # =======================================================
+
+# Title and header text
 st.set_page_config(page_title="Coptic Metadata Viewer", page_icon=":book:")
 st.title("Coptic Metadata Viewer")
 st.markdown("Ask questions about manuscripts, authors, works, and more. You can ask a question in natural language or search for specific terms in the metadata.")
@@ -227,13 +241,22 @@ st.markdown("Ask questions about manuscripts, authors, works, and more. You can 
 mode = st.radio("Choose your query mode:", ["Natural Language Question", "Universal String Search"])
 
 # Text input
-user_input = st.text_area("🔎 Enter your query:")
+user_input = st.text_area("🔎 Enter your question:")
+
+
+# There are two options: natural language questions or universal string search.
+# The natural language option allows you to ask questions in a conversational manner, 
+# while the universal string search lets you find specific terms in the metadata.
 
 if st.button("Submit"):
+    # Process the user input
     query_text = user_input.strip()
+    # Remove any unwanted characters
+    query_text = query_text.replace("`", "")
     if query_text:
         with st.spinner("Querying the graph..."):
             try:
+                # If the user has selected "Universal String Search"
                 if mode == "Universal String Search":
                     search_string = query_text.lower()
                     universal_query = f"""
@@ -261,7 +284,8 @@ if st.button("Submit"):
                             obj = row.get("object", {}).get("value", "")
 
                             st.markdown(f"#### Result {i}")
-
+                            
+                            # Function to highlight search terms
                             def highlight_term(text, term):
                                 lower = text.lower()
                                 start = lower.find(term)
@@ -274,8 +298,9 @@ if st.button("Submit"):
                                     ]
                                 else:
                                     return [text]
-
-                            search_term = query_text.lower()
+                            
+                            # Lowercase the search term
+                            search_term = user_input.lower()
 
                             st.write("**Found in:**")
                             annotated_text(*highlight_term(subject, search_term))
@@ -289,27 +314,14 @@ if st.button("Submit"):
                     else:
                         st.info("No matches found.")
                 else:
-                    result = chain.invoke({"query": query_text})
-                    sparql_query = result.get("intermediate_steps", {}).get("original_sparql") or \
-                                   result.get("intermediate_steps", {}).get("fixed_sparql")
-                    answer = result.get("answer", "[No answer returned. Try a universal string search.]")
-
-                    if sparql_query:
-                        st.subheader("🧐 Generated SPARQL Query")
-                        st.code(sparql_query, language="sparql")
-
-                    st.subheader("📘 Answer")
-                    if isinstance(answer, list):
-                        for i, item in enumerate(answer, start=1):
-                            st.markdown(f"#### Result {i}")
-                            annotated_text(*item)
-                    else:
-                        if answer:
-                            st.markdown(answer)
-                        elif not answer:
-                            st.markdown("No answer returned. Try a universal string search.")
+                    # If the user has selected "Natural Language Question"
+                    answer = chain.invoke(query_text.strip())
+                    st.success("✅ Answer:")
+                    output = answer.get('result', '[No result returned]')
+                    st.markdown(output)
             except Exception as e:
                 st.error("Error running query:")
                 st.exception(e)
+    # If the user hasn't entered a question
     else:
-        st.warning("Please enter a query.")
+        st.warning("Please enter a question.")
