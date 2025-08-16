@@ -1,9 +1,0 @@
-### Natural language:
-Who authored the work with the identifier "cc0001"?
-
-### SPARQL:
-PREFIX dcterms: <http://purl.org/dc/terms/>
-SELECT ?author WHERE {{
-  ?work dcterms:identifier "cc0001" ;
-        dcterms:creator ?author .
-}}

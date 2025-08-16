@@ -21,7 +21,7 @@ from annotated_text import annotated_text
 @st.cache_resource
 def load_graph_and_schema():
     graph = RdfGraph(
-        source_file="streamlit_app/graph/graph.ttl",
+        source_file="./graph/graph.ttl",
         standard="rdf",
         serialization="ttl",
     )
@@ -29,7 +29,8 @@ def load_graph_and_schema():
     schema = graph.get_schema
     return graph, schema
 
-graph, schema = load_graph_and_schema()
+with st.spinner("Loading the graph ..."):
+    graph, schema = load_graph_and_schema()
 
 # -- Prompts --
 sparql_prompt=PromptTemplate(
@@ -162,8 +163,11 @@ qa_prompt = PromptTemplate(
     template="""
     You are a friendly and knowledgeable digital research assistant specializing in Coptic and Greek texts.
 
-    Given the structured data below, answer the user’s question in clear, natural language.
+    Given the structured data below, answer the user's question in clear, natural language.
     Use complete sentences. If multilingual forms are included, identify which language each form belongs to.
+
+    Do not attempt to connect to the internet. All you need is the information provided in the structured data 
+    from the SPARQL query results.
 
     Structured data:
     {context}
@@ -239,8 +243,8 @@ class DualLLMSparqlChain(Runnable):
 @st.cache_resource
 def load_chain():
     return DualLLMSparqlChain(
-    sparql_llm=OllamaLLM(model="codestral:22b"),
-    qa_llm=OllamaLLM(model="mistral-small3.2:latest"),
+    sparql_llm=OllamaLLM(model="codestral:22b", base_url="http://host.docker.internal:11434"),
+    qa_llm=OllamaLLM(model="mistral-small3.2:24b", base_url="http://host.docker.internal:11434"),
     sparql_prompt=sparql_prompt,
     qa_prompt=qa_prompt,
     graph=graph
@@ -254,6 +258,7 @@ chain = load_chain()
 st.set_page_config(page_title="Coptic Metadata Viewer", page_icon=":book:")
 st.title("Coptic Metadata Viewer")
 st.markdown("Ask questions about manuscripts, authors, works, and more. You can ask a question in natural language or search for specific terms in the metadata.")
+st.info("Ensure Ollama is running locally with models `codestral:22b` and `mistral-small3.2`.")
 
 # Choose mode
 mode = st.radio("Choose your query mode:", ["Natural Language Question", "Universal String Search"])
