@@ -29,15 +29,13 @@ def load_graph_and_schema():
     schema = graph.get_schema
     return graph, schema
 
-with st.spinner("Loading the graph ..."):
-    graph, schema = load_graph_and_schema()
+graph, schema = load_graph_and_schema()
 
 # -- Prompts --
 sparql_prompt=PromptTemplate(
     input_variables=["prompt", "schema"],
     template="""
     Task: Generate a SPARQL SELECT statement for querying a graph database.
-    You are an expert in SPARQL queries and RDF graph structures.
     You are an expert in SPARQL queries and RDF graph structures. 
     You know NEVER to use backticks anywhere in your output. 
     In fact, you don't even know what the backtick key is. 
