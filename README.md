@@ -25,7 +25,7 @@ The first method uses two Large Language Models (LLMs): one to convert the user'
 
 Our criteria for selecting the LLMs were that they had to be relatively small, open source, free to use, and reliable. We tested several LLMs during the selection process. For the coding element, we tested the following models:
 
-- `codelamma:13b` (Meta)
+- `codellama:13b` (Meta)
 - `codegemma:7b` (Google)
 - `codeqwen:7b` (Alibaba)
 - `codestral:22b` (Mistral)
@@ -92,8 +92,13 @@ Make sure Docker Desktop and Ollama are running.
 From the command line (in Terminal) do the following:
 
 1. Navigate to the `coptic_metadata_viewer` directory. If you downloaded it to your `Documents` directory, do `cd ~/Documents/coptic_metadata_viewer`, for example.
-2. Execute the following command `bash start.sh`. That will create a Docker container, install the necessary Python libraries, and start the Streamlit app. This may take a few minutes the first time as Docker builds the image.
+2. Execute the following command `bash start.sh`. That will create a Docker container, install the necessary Python libraries, and start the Streamlit app. This may take a few minutes the first time as Docker builds the image. Generally speaking, it will take about 30 seconds, all things considered.
 3. Open a browser and go to `http://localhost:8501`.
 
 ***
-The code in this repository was generated with the assistance of [Chat-GPT](https://chatgpt.com/).
+This project was developed using a hybrid approach: traditional coding, selective use of AI coding assistants ([Chat-GPT](https://chatgpt.com/) and [GitHub Copilot](https://github.com/features/copilot)), coding tools ([Protégé](https://protege.stanford.edu/) and [Visual Studio Code](https://code.visualstudio.com/)), and adapted examples from tutorials. All outputs were reviewed, adapted, and validated by me, Samuel J. Huskey, and I take full responsibility for the design, adaptation, and accuracy of the final code.
+
+I adapted portions of code from the following tutorials (with modifications for this project’s requirements):
+
+- ["Ontotext GraphDB"](https://python.langchain.com/docs/integrations/graphs/ontotext/) (LangChain, last accessed 2025-08-19)
+- ["RDFLib"](https://python.langchain.com/docs/integrations/graphs/rdflib_sparql/) (LangChain, last accessed 2025-08-19)
