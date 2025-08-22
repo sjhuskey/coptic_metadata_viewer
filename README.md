@@ -30,6 +30,8 @@ Our criteria for selecting the LLMs were that they had to be relatively small, o
 - `codeqwen:7b` (Alibaba)
 - `codestral:22b` (Mistral)
 
+See the file in `notebooks/code_llm_test.py` for the test.
+
 We selected [`codestral:22b`](https://mistral.ai/news/codestral) because it consistently returned valid SPARQL queries.
 
 For the natural language response element, we tested the following models:
@@ -42,6 +44,8 @@ For the natural language response element, we tested the following models:
 - `llama4` (Meta)
 - `granite3.3` (IBM)
 - `smollm` (SmolLM)
+
+See the file in `notebooks/qa_llm_test.py` for the test.
 
 In fact, we tested these models on both the SPARQL query task and the natural language response task, but we found that the coding-specific models were superior. In the end, we selected [`mistral-small3.2:24b`](https://huggingface.co/mistralai/Mistral-Small-3.2-24B-Instruct-2506) for the response task.
 
@@ -96,7 +100,10 @@ From the command line (in Terminal) do the following:
 3. Open a browser and go to `http://localhost:8501`.
 
 ***
-This project was developed using a hybrid approach: traditional coding, selective use of AI coding assistants ([Chat-GPT](https://chatgpt.com/) and [GitHub Copilot](https://github.com/features/copilot)), coding tools ([Protégé](https://protege.stanford.edu/) and [Visual Studio Code](https://code.visualstudio.com/)), and adapted examples from tutorials. All outputs were reviewed, adapted, and validated by me, Samuel J. Huskey, and I take full responsibility for the design, adaptation, and accuracy of the final code.
+
+This work was created with an even blend of human and AI contributions. AI was used to make content edits, such as changes to scope, information, and ideas. AI was used to make new content, such as computer code and documentation. AI was prompted for its contributions, or AI assistance was enabled. AI-generated content was reviewed and approved. The following model(s) or application(s) were used: ([Chat-GPT](https://chatgpt.com/) 4o, [Claude](https://claude.ai/) Sonnet 3.7, and [GitHub Copilot](https://github.com/features/copilot), enabled in [Visual Studio Code](https://code.visualstudio.com/). The ontology was crafted using [Protégé](https://protege.stanford.edu/).
+
+All outputs were reviewed, adapted, and validated by me, Samuel J. Huskey, and I take full responsibility for the design, adaptation, and accuracy of the final code.
 
 I adapted portions of code from the following tutorials (with modifications for this project’s requirements):
 
