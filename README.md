@@ -109,3 +109,5 @@ I adapted portions of code from the following tutorials (with modifications for 
 
 - ["Ontotext GraphDB"](https://python.langchain.com/docs/integrations/graphs/ontotext/) (LangChain, last accessed 2025-08-19)
 - ["RDFLib"](https://python.langchain.com/docs/integrations/graphs/rdflib_sparql/) (LangChain, last accessed 2025-08-19)
+
+![](https://zenodo.org/badge/DOI/10.5281/zenodo.16986885.svg)
