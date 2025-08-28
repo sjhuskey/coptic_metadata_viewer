@@ -1,26 +1,24 @@
-# README
-
-## The Coptic Metadata Viewer
+# Coptic Metadata Viewer
 
 The application in this repository was developed by Samuel J. Huskey in partial fulfillment of a seed funding grant from the [University of Oklahoma](https://ou.edu/)'s [Data Institute for Societal Challenges](https://www.ou.edu/disc) (DISC). The project's title is "AI for Cost-Effective Research Workflows When Funding is Scarce" (co-PI's: Samuel J. Huskey, Raina Heaton, and Caroline T. Schroeder).
 
-### Goal
+## Goal
 
 To facilitate the generation of metadata for the [Coptic SCRIPTORIUM](https://copticscriptorium.org/) project using existing low- or no-cost generative AI tools and methods.
 
-### Background
+## Background
 
 Gathering information for metadata about the sources of texts in the Coptic SCRIPTORIUM is a tedious and time-consuming project. With this project, we seek to use generative AI to handle many of the low-level tasks of information-gathering so co-PI Schroeder and her colleagues can spend more of their time on higher-level tasks.
 
 Our focus during this seed-funding period is making it easier to find and extract data from the [Tracking Papyrus and Parchment Paths: An Archaeological Atlas of Coptic Literature](https://atlas.paths-erc.eu/) (PAThs) website. Although PAThs is a treasure-store of high-quality data about Coptic texts and manuscripts, its interface lacks a tool for searching across its multiple indices. Consequently, finding a particular piece of information can require multiple clicks and page loads, adding up to significant time spent away from other research tasks.
 
-### Solution
+## Solution
 
 Since PAThs data are openly available in [JSON format](https://www.json.org/json-en.html) through an API under a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/#ref-same-license) license, we downloaded them and transformed them into a [graph database](https://en.wikipedia.org/wiki/Graph_database). Following the best practices of [Linked Open Data](https://www.w3.org/DesignIssues/LinkedData), we selected existing metadata terms to describe the PAThs data according to the Resource Description Framework. We also created an [ontology](https://www.w3.org/TR/owl-ref/) (see `streamlit_app/graph/coptic_ontology.ttl`) to describe the graph database and to enable inferencing by a reasoning engine.
 
-Of course, an RDF graph database is not much use to anyone without a way to query it. The most direct way of doing that is with a [SPARQL endpoint](https://www.w3.org/TR/sparql11-query/), but that does not meet the requirement of being easy and quick to use. Accordingly, we built a lightweight [Streamlit](https://streamlit.io/) application that allows a user to query the graph database in two ways.
+Of course, an RDF graph database is not much use to anyone without a way to query it and visualize the results. The most direct way of doing that is with a [SPARQL endpoint](https://www.w3.org/TR/sparql11-query/), but that does not meet the requirement of being easy and quick to use. Accordingly, we built a lightweight [Streamlit](https://streamlit.io/) application that allows a user to query the graph database in two ways.
 
-#### 1. Natural Language via LLMs
+### 1. Natural Language via LLMs
 The first method uses two Large Language Models (LLMs): one to convert the user's query into SPARQL and execute the search, another to interpret the results in plain language.
 
 Our criteria for selecting the LLMs were that they had to be relatively small, open source, free to use, and reliable. We tested several LLMs during the selection process. For the coding element, we tested the following models:
@@ -51,7 +49,7 @@ In fact, we tested these models on both the SPARQL query task and the natural la
 
 We use [Ollama](https://ollama.com/) to run the models and [LangChain](https://www.langchain.com/) to handle the processes of accepting the user's query, converting to SPARQL, querying the graph, and returning the results.
 
-#### 2. Simple String Search
+### 2. Simple String Search
 The second method simply plugs the string into a general SPARQL template:
 
 ```sparql
@@ -99,9 +97,11 @@ From the command line (in Terminal) do the following:
 2. Execute the following command `bash start.sh`. That will create a Docker container, install the necessary Python libraries, and start the Streamlit app. This may take a few minutes the first time as Docker builds the image. Generally speaking, it will take about 30 seconds, all things considered.
 3. Open a browser and go to `http://localhost:8501`.
 
-***
+## Attributions
 
 This work was created with an even blend of human and AI contributions. AI was used to make content edits, such as changes to scope, information, and ideas. AI was used to make new content, such as computer code and documentation. AI was prompted for its contributions, or AI assistance was enabled. AI-generated content was reviewed and approved. The following model(s) or application(s) were used: ([Chat-GPT](https://chatgpt.com/) 4o, [Claude](https://claude.ai/) Sonnet 3.7, and [GitHub Copilot](https://github.com/features/copilot), enabled in [Visual Studio Code](https://code.visualstudio.com/). The ontology was crafted using [Protégé](https://protege.stanford.edu/).
+
+![Statement of attribution generated by IBM AI Attribution Toolkit](abbreviated_statement.svg)
 
 All outputs were reviewed, adapted, and validated by me, Samuel J. Huskey, and I take full responsibility for the design, adaptation, and accuracy of the final code.
 
