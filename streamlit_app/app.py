@@ -95,7 +95,7 @@ class DualLLMSparqlChain(Runnable):
 @st.cache_resource
 def load_chain():
     return DualLLMSparqlChain(
-    sparql_llm=OllamaLLM(model="codelamma:13b", base_url="http://host.docker.internal:11434",temperature=0),
+    sparql_llm=OllamaLLM(model="codestral:22b", base_url="http://host.docker.internal:11434",temperature=0),
     qa_llm=OllamaLLM(model="mistral-small3.2:24b", base_url="http://host.docker.internal:11434",temperature=0),
     sparql_prompt=sparql_prompt,
     qa_prompt=qa_prompt,
